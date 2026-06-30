@@ -1,0 +1,16 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Node
+node_modules/
+.next/
+out/
+build/
+
+# Project Specific
+vector_db/
+models/
+.DS_Store
