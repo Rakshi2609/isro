@@ -44,6 +44,8 @@ class ChatResponse(BaseModel):
     cli_commands: List[str] = Field(default_factory=list)
     shap_evidence: Dict[str, str] = Field(default_factory=dict)
     historical_incident: HistoricalIncidentSchema
+    response_source: str = "AI_GENERATED"
+    knowledge_sources: List[str] = Field(default_factory=list)
     
 class HealthResponse(BaseModel):
     status: str = "ok"

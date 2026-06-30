@@ -26,6 +26,10 @@ class IncidentMemory:
             name="runbooks",
             embedding_function=self.embedding_function
         )
+        self.cache_collection = self.client.get_or_create_collection(
+            name="semantic_cache",
+            embedding_function=self.embedding_function
+        )
 
     def store_incident(self, incident_id: str, description: str, metadata: dict = None):
         self.incident_collection.add(
@@ -57,3 +61,34 @@ class IncidentMemory:
             include=["documents", "metadatas", "distances"]
         )
         return results
+
+    def check_semantic_cache(self, query: str, threshold: float = 0.90):
+        try:
+            results = self.cache_collection.query(
+                query_texts=[query],
+                n_results=1,
+                include=["documents", "metadatas", "distances"]
+            )
+            if not results["distances"] or not results["distances"][0]:
+                return None
+            
+            distance = results["distances"][0][0]
+            # Assuming distance is roughly 1 - similarity. Adjust based on embedding function.
+            if distance < (1.0 - threshold): 
+                return results["metadatas"][0][0].get("response_json")
+            return None
+        except Exception:
+            return None
+
+    def store_in_cache(self, query: str, response_json: str):
+        import uuid
+        try:
+            cache_id = str(uuid.uuid4())
+            self.cache_collection.add(
+                documents=[query],
+                metadatas=[{"response_json": response_json}],
+                ids=[cache_id]
+            )
+        except Exception as e:
+            pass
+

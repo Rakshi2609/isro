@@ -35,4 +35,6 @@ export interface Scenario {
     similarity: string;
   };
   recovery_toast: string;
+  response_source?: "CACHED" | "AI_GENERATED" | "SIMILAR";
+  knowledge_sources?: string[];
 }

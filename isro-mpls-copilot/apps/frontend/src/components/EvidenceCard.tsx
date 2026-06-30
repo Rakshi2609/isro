@@ -76,6 +76,20 @@ export default function EvidenceCard({ scenario, demoActive, recoveryState }: { 
            </div>
          </div>
       </div>
+
+      {scenario.knowledge_sources && scenario.knowledge_sources.length > 0 && (
+        <div className="bg-[#0d111c] border border-slate-800 rounded-xl p-4 shadow-lg">
+          <h3 className="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Knowledge Sources</h3>
+          <div className="flex flex-wrap gap-2">
+            {scenario.knowledge_sources.map((src, i) => (
+              <span key={i} className="text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                {src}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
