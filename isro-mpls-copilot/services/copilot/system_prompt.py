@@ -40,7 +40,8 @@ YOUR RESPONSE MUST BE VALID JSON AND EXACTLY MATCH THIS SCHEMA:
     "incident_id": "Incident-XXX",
     "resolved_by": "How it was resolved in the past",
     "similarity": "Percentage match (e.g. 96%)"
-  }
+  },
+  "recovery_options": ["Action 1 (e.g. Reroute via MPLS-B)", "Action 2"]
 }
 """
 

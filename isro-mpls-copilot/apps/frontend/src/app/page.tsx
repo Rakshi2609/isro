@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { scenarios } from "../data/scenarios";
-import { Scenario } from "../types";
+import { CopilotResponse } from "../types";
 import MissionCard from "../components/MissionCard";
 import TopologyCard from "../components/TopologyCard";
 import PredictionPanel from "../components/PredictionPanel";
@@ -11,26 +11,33 @@ import OperatorLog from "../components/OperatorLog";
 
 export default function Home() {
   const [activeScenarioId, setActiveScenarioId] = useState(scenarios[0].id);
-  const [activeData, setActiveData] = useState<Scenario>(scenarios[0]);
-  
   const [demoActive, setDemoActive] = useState(false);
   const [recoveryState, setRecoveryState] = useState<"IDLE" | "REROUTING" | "RESOLVED">("IDLE");
   const [logs, setLogs] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [activeTelemetry, setActiveTelemetry] = useState(scenarios[0].initial_telemetry);
   
   // Custom Query State
   const [customQuery, setCustomQuery] = useState("");
   const [isQuerying, setIsQuerying] = useState(false);
 
-  // Reset states when dropdown scenario changes (before run)
+  // The true backend response state
+  const [apiResponse, setApiResponse] = useState<CopilotResponse | null>(null);
+  const [selectedRecoveryOption, setSelectedRecoveryOption] = useState<string>("");
+
+  const activeScenarioFallback = scenarios.find(s => s.id === activeScenarioId);
+  const initialTelemetry = activeScenarioFallback ? activeScenarioFallback.initial_telemetry : {};
+  const [activeTelemetry, setActiveTelemetry] = useState(initialTelemetry);
+
   useEffect(() => {
+    // Just resetting the local UI state when selecting a different dropdown option
     setDemoActive(false);
     setRecoveryState("IDLE");
     setLogs([]);
     setToast(null);
-    setActiveData(scenarios.find(s => s.id === activeScenarioId) as Scenario);
-    setActiveTelemetry(scenarios.find(s => s.id === activeScenarioId)!.initial_telemetry);
+    setApiResponse(null);
+    if (activeScenarioFallback) {
+      setActiveTelemetry(activeScenarioFallback.initial_telemetry);
+    }
   }, [activeScenarioId]);
 
   const addLog = (msg: string) => {
@@ -39,41 +46,52 @@ export default function Home() {
     setLogs(prev => [...prev, `${timeStr} ${msg}`]);
   };
 
-  const handleRunDemo = async () => {
-    setDemoActive(true);
-    setRecoveryState("IDLE");
-    setLogs([]);
-    
-    addLog(`Initiating scenario: ${activeData.name}`);
-    addLog("Hitting Level 1 Fast Cache...");
-    
+  const executeApiCall = async (query: string, telemetry: any) => {
     setIsQuerying(true);
+    setApiResponse(null);
     
     try {
       const response = await fetch("http://127.0.0.1:8000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: `SCENARIO:${activeData.id}`,
-          telemetry: activeData.initial_telemetry,
+          query: query,
+          telemetry: telemetry,
           prediction_data: {},
         }),
       });
       
-      // Even if API fails in demo mode, we fallback to our exact hardcoded scenario payload
-      const mockResult = { ...activeData, response_source: "CACHED", knowledge_sources: ["Runbook", "Historical Incident"] } as Scenario;
-      
-      setTimeout(() => {
-        setIsQuerying(false);
-        setActiveData(mockResult);
-        addLog("WARNING: Telemetry anomalies detected");
-        setActiveTelemetry(activeData.degraded_telemetry);
-        addLog("Copilot diagnostics retrieved instantly from cache.");
-      }, 300); // Super fast 300ms for demo
-      
+      const data: CopilotResponse = await response.json();
+      setIsQuerying(false);
+      setApiResponse(data);
+      if (data.recovery_options && data.recovery_options.length > 0) {
+        setSelectedRecoveryOption(data.recovery_options[0]);
+      } else {
+        setSelectedRecoveryOption("Generic Sub-50ms Reroute");
+      }
+      return data;
     } catch (e) {
       setIsQuerying(false);
       console.error(e);
+      addLog("ERROR: Connection to API failed.");
+      return null;
+    }
+  };
+
+  const handleRunDemo = async () => {
+    setDemoActive(true);
+    setRecoveryState("IDLE");
+    setLogs([]);
+    addLog(`Initiating backend fetch for scenario...`);
+    
+    // Simulate anomaly
+    if (activeScenarioFallback) {
+      setActiveTelemetry(activeScenarioFallback.degraded_telemetry);
+    }
+    
+    const data = await executeApiCall(`SCENARIO:${activeScenarioId}`, activeTelemetry);
+    if (data) {
+      addLog(`Diagnostics generated. Source: ${data.response_source}`);
     }
   };
 
@@ -85,67 +103,33 @@ export default function Home() {
     setRecoveryState("IDLE");
     setLogs([]);
     addLog(`Operator Query: ${customQuery}`);
-    addLog("Checking Semantic Cache...");
     
-    setIsQuerying(true);
-    
-    try {
-      const response = await fetch("http://127.0.0.1:8000/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: customQuery,
-          telemetry: activeTelemetry,
-          prediction_data: {},
-        }),
-      });
-      
-      const data = await response.json();
-      setIsQuerying(false);
-      
-      // Overwrite the active data with the real API response
-      // For a real app, map the Pydantic JSON exactly to the Scenario interface
-      const mappedData: Scenario = {
-        id: "custom",
-        name: "Custom Query Analysis",
-        mission_status: activeData.mission_status,
-        initial_telemetry: activeTelemetry,
-        degraded_telemetry: activeTelemetry,
-        recovered_telemetry: activeData.recovered_telemetry,
-        prediction: data.prediction,
-        evidence: data.evidence,
-        root_cause: data.root_cause,
-        affected_scope: data.affected_scope,
-        recommended_actions: data.recommended_actions,
-        cli_commands: data.cli_commands,
-        shap_evidence: data.shap_evidence,
-        historical_incident: data.historical_incident,
-        recovery_toast: "Custom Recovery plan executed.",
-        response_source: data.response_source,
-        knowledge_sources: data.knowledge_sources
-      };
-      
-      setActiveData(mappedData);
+    const data = await executeApiCall(customQuery, activeTelemetry);
+    if (data) {
       addLog(`Diagnostics generated. Source: ${data.response_source}`);
-      
-    } catch (e) {
-      setIsQuerying(false);
-      addLog("ERROR: Failed to connect to RAG backend.");
-      console.error(e);
     }
   };
 
   const handleSimulate = () => {
     setRecoveryState("REROUTING");
-    addLog("Operator initiated What-If Simulation.");
-    addLog("Calculating fallback routing constraints...");
+    addLog(`Operator initiated recovery: ${selectedRecoveryOption}`);
+    addLog("Calculating dynamic fallback routing constraints...");
     
     setTimeout(() => {
       addLog("Activating backup paths...");
-      addLog(activeData.recovery_toast);
+      const successMsg = `Action '${selectedRecoveryOption}' simulated successfully.`;
+      addLog(successMsg);
       setRecoveryState("RESOLVED");
-      setActiveTelemetry(activeData.recovered_telemetry);
-      setToast(activeData.recovery_toast);
+      
+      // Generic telemetry recovery
+      const recovered = { ...activeTelemetry };
+      for (const k in recovered) {
+        if (k.includes("Loss") || k.includes("Drops") || k.includes("Errors")) recovered[k] = "0";
+        if (k.includes("CPU")) recovered[k] = "40%";
+        if (k.includes("State")) recovered[k] = "UP/ESTAB";
+      }
+      setActiveTelemetry(recovered);
+      setToast(successMsg);
       
       setTimeout(() => setToast(null), 5000);
     }, 2500);
@@ -167,11 +151,11 @@ export default function Home() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-500 flex items-center gap-3">
             ISRO NOC Copilot
-            {activeData.response_source && (
+            {apiResponse?.response_source && (
               <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border flex items-center gap-1 mt-1
-                ${activeData.response_source === 'CACHED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 
+                ${apiResponse.response_source === 'CACHED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 
                   'bg-purple-500/20 text-purple-400 border-purple-500/30'}`}>
-                {activeData.response_source === 'CACHED' ? '🟢 CACHED' : '🟣 AI GENERATED'}
+                {apiResponse.response_source === 'CACHED' ? '🟢 CACHED' : '🟣 AI GENERATED'}
               </span>
             )}
           </h1>
@@ -231,19 +215,21 @@ export default function Home() {
         
         {/* LEFT COLUMN: Mission & Topology (3 Cols) */}
         <div className="lg:col-span-3 space-y-6 flex flex-col">
-          <MissionCard scenario={activeData} demoActive={demoActive} recoveryState={recoveryState} />
+          <MissionCard apiResponse={apiResponse} demoActive={demoActive} recoveryState={recoveryState} />
           
-          <TopologyCard scenario={activeData} demoActive={demoActive} recoveryState={recoveryState} />
+          <TopologyCard apiResponse={apiResponse} demoActive={demoActive} recoveryState={recoveryState} />
           
           <div className="bg-[#0d111c] border border-slate-800 rounded-xl p-5 shadow-lg flex-1">
              <h3 className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-widest">Active Telemetry</h3>
              <div className="space-y-2">
                {Object.entries(activeTelemetry).map(([key, val]) => {
-                 const isInitial = scenarios.some(s => s.initial_telemetry[key] === val);
+                 // For UI styling, if it's degraded we want to show it red. 
+                 // Since we don't know the exact "initial" value generically, we'll just check if demo is active and idle.
+                 const isDegraded = demoActive && recoveryState === 'IDLE' && String(val) !== "0" && String(val) !== "0%" && !String(val).includes("UP") && !String(val).includes("ESTAB");
                  return (
                    <div key={key} className="flex justify-between items-center text-xs font-mono bg-slate-900/50 p-2 rounded border border-slate-800/50">
                      <span className="text-cyan-500">{key}</span>
-                     <span className={!isInitial && demoActive && recoveryState === 'IDLE' ? 'text-red-400 font-bold' : 'text-slate-300'}>{String(val)}</span>
+                     <span className={isDegraded ? 'text-red-400 font-bold' : 'text-slate-300'}>{String(val)}</span>
                    </div>
                  );
                })}
@@ -253,38 +239,55 @@ export default function Home() {
 
         {/* CENTER COLUMN: Prediction (5 Cols) */}
         <div className="lg:col-span-5 space-y-6 flex flex-col">
-          <PredictionPanel scenario={activeData} demoActive={demoActive} recoveryState={recoveryState} />
+          <PredictionPanel apiResponse={apiResponse} demoActive={demoActive} recoveryState={recoveryState} />
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-black border border-slate-800 rounded-xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-transparent"></div>
                <h3 className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-widest">Required Diagnostics</h3>
                <div className="space-y-2">
-                 {activeData.cli_commands.map((cmd, i) => (
+                 {apiResponse ? apiResponse.cli_commands.map((cmd, i) => (
                    <div key={i} className="font-mono text-[10px] text-emerald-400 bg-slate-900/50 p-2 rounded border border-slate-800 overflow-x-auto whitespace-nowrap">
                      <span className="text-slate-600 mr-2">$</span>{cmd}
                    </div>
-                 ))}
+                 )) : (
+                   <div className="text-xs text-slate-600 italic">Awaiting AI diagnostic commands...</div>
+                 )}
                </div>
             </div>
             
             <div className="bg-[#0d111c] border border-blue-900/40 rounded-xl p-5 shadow-[0_0_20px_rgba(37,99,235,0.1)] flex flex-col justify-center items-center text-center">
                <h3 className="text-sm font-bold text-slate-200 mb-2">What-If Simulation</h3>
-               <p className="text-[10px] text-slate-400 mb-4">Virtually test the fallback routing path before executing on live hardware.</p>
+               
+               {apiResponse && apiResponse.recovery_options && apiResponse.recovery_options.length > 0 ? (
+                 <select 
+                   value={selectedRecoveryOption}
+                   onChange={(e) => setSelectedRecoveryOption(e.target.value)}
+                   disabled={!demoActive || recoveryState !== "IDLE"}
+                   className="w-full bg-slate-900 border border-slate-700 text-[10px] rounded p-2 text-cyan-400 outline-none focus:border-cyan-500 mb-3"
+                 >
+                   {apiResponse.recovery_options.map((opt, i) => (
+                     <option key={i} value={opt}>{opt}</option>
+                   ))}
+                 </select>
+               ) : (
+                 <p className="text-[10px] text-slate-400 mb-4">Virtually test the fallback routing path before executing on live hardware.</p>
+               )}
+
                <button 
                  onClick={handleSimulate}
-                 disabled={!demoActive || recoveryState !== "IDLE"}
+                 disabled={!apiResponse || recoveryState !== "IDLE"}
                  className={`w-full py-2.5 rounded font-bold text-xs uppercase tracking-wide transition-all flex justify-center items-center gap-2
                  ${recoveryState === 'RESOLVED' ? 'bg-emerald-600/20 text-emerald-500 border border-emerald-500/30' : 
                    recoveryState === 'REROUTING' ? 'bg-blue-600/50 text-white cursor-wait' : 
-                   demoActive ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
+                   apiResponse ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
                >
                  {recoveryState === 'RESOLVED' ? (
                    <>✓ Recovery Simulated</>
                  ) : recoveryState === 'REROUTING' ? (
                    <><svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Testing Reroute...</>
                  ) : (
-                   <>▶ Simulate Recovery</>
+                   <>▶ Simulate Action</>
                  )}
                </button>
             </div>
@@ -297,7 +300,7 @@ export default function Home() {
 
         {/* RIGHT COLUMN: Evidence & Root Cause (4 Cols) */}
         <div className="lg:col-span-4 h-full">
-          <EvidenceCard scenario={activeData} demoActive={demoActive} recoveryState={recoveryState} />
+          <EvidenceCard apiResponse={apiResponse} demoActive={demoActive} recoveryState={recoveryState} />
         </div>
       </div>
     </div>
