@@ -37,15 +37,45 @@ export default function PredictionPanel({ apiResponse, demoActive, recoveryState
           </div>
         </div>
 
-        <div>
-          <div className="flex justify-between text-[10px] uppercase font-bold mb-1">
-            <span className="text-slate-500">Risk Confidence</span>
-            <span className={isGreen ? 'text-emerald-400' : isRed ? 'text-red-400' : 'text-slate-500'}>
-              {isGreen ? "22%" : !demoActive ? "0%" : apiResponse.prediction.confidence}
-            </span>
-          </div>
-          <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
-            <div className={`h-full transition-all duration-1000 ${isGreen ? 'bg-emerald-500' : isRed ? 'bg-red-500' : 'bg-slate-700'}`} style={{ width: isGreen ? '22%' : !demoActive ? '0%' : apiResponse.prediction.confidence }}></div>
+        <div className="bg-[#090b14]/50 rounded-lg p-4 border border-slate-800/50">
+          <h4 className="text-[10px] uppercase font-bold text-slate-500 mb-3 tracking-widest border-b border-slate-800/50 pb-2">Confidence Decomposition</h4>
+          
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-[10px] uppercase font-bold mb-1">
+                <span className="text-slate-400">Prediction Engine</span>
+                <span className="text-emerald-400">96%</span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-1 overflow-hidden"><div className="h-full bg-emerald-500" style={{width: '96%'}}></div></div>
+            </div>
+            
+            <div>
+              <div className="flex justify-between text-[10px] uppercase font-bold mb-1">
+                <span className="text-slate-400">Evidence Quality</span>
+                <span className="text-emerald-400">93%</span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-1 overflow-hidden"><div className="h-full bg-emerald-500" style={{width: '93%'}}></div></div>
+            </div>
+
+            <div>
+              <div className="flex justify-between text-[10px] uppercase font-bold mb-1">
+                <span className="text-slate-400">Knowledge Groundedness</span>
+                <span className="text-emerald-400">95%</span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-1 overflow-hidden"><div className="h-full bg-emerald-500" style={{width: '95%'}}></div></div>
+            </div>
+
+            <div className="pt-2 mt-2 border-t border-slate-800/50">
+              <div className="flex justify-between text-xs uppercase font-bold mb-1">
+                <span className="text-cyan-500">Final Aggregated Confidence</span>
+                <span className={isGreen ? 'text-emerald-400' : isRed ? 'text-red-400' : 'text-slate-300'}>
+                  {isGreen ? "100%" : !demoActive ? "0%" : apiResponse.prediction.confidence}
+                </span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                <div className={`h-full transition-all duration-1000 ${isGreen ? 'bg-emerald-500' : isRed ? 'bg-red-500' : 'bg-slate-700'}`} style={{ width: isGreen ? '100%' : !demoActive ? '0%' : apiResponse.prediction.confidence }}></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -3,6 +3,8 @@
 import { useCopilot } from "../../context/CopilotContext";
 import PredictionPanel from "../../components/PredictionPanel";
 import EvidenceCard from "../../components/EvidenceCard";
+import EvidenceGraph from "../../components/EvidenceGraph";
+import DecisionEngineCard from "../../components/DecisionEngineCard";
 
 export default function DiagnosticsPage() {
   const { apiResponse, demoActive, recoveryState } = useCopilot();
@@ -14,9 +16,15 @@ export default function DiagnosticsPage() {
         <p className="text-sm text-slate-500">Root cause analysis, confidence scoring, and supporting evidence.</p>
       </header>
 
+      {/* Top Section: Evidence Graph (Full Width) */}
+      <div className="mb-8 w-full">
+        <EvidenceGraph apiResponse={apiResponse} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1">
         <div className="space-y-8 flex flex-col">
           <PredictionPanel apiResponse={apiResponse} demoActive={demoActive} recoveryState={recoveryState} />
+          <DecisionEngineCard apiResponse={apiResponse} demoActive={demoActive} recoveryState={recoveryState} />
         </div>
         
         <div className="space-y-8 flex flex-col h-full">
