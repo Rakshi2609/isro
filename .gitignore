@@ -13,4 +13,3 @@ build/
 vector_db/
 models/
 .DS_Store
-config.bat
